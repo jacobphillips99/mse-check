@@ -17,6 +17,10 @@ def load_data():
 """
 prepare to query the policy client for actions
 """
+def get_url(host: str, port: int, endpoint: str):
+    port_str = f":{port}" if port >= 0 else ""
+    return f"http://{host}{port_str}/{endpoint}"
+
 class PolicyClient:
     """
     A simple client to query actions from the policy server
@@ -40,7 +44,7 @@ class PolicyClient:
 
         # Use the session for connection reuse
         action = self._session.post(
-            f"http://{self.host}:{self.port}/act",
+            get_url(self.host, self.port, "act"),
             json={
                 "image": obs_dict["image_primary"],
                 "instruction": language_instruction,
