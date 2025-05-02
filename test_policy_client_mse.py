@@ -7,7 +7,6 @@ Pulled from https://github.com/zhouzypaul/mse-check/blob/main/test_policy_client
 
 import asyncio
 import datetime
-import os
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +19,10 @@ from tqdm import tqdm
 from utils.data import load_data
 from utils.eval import analyze_saved_results, evaluate_actions
 from utils.server import PolicyClient, get_url
+
+from vlm_autoeval_robot_benchmark.utils.ecot_primitives.ecot_primitive_movements import (
+    classify_movement as ecot_classify_movement,
+)
 
 json_numpy.patch()
 
@@ -62,13 +65,17 @@ def assemble_history_dict(
     else:
         raise ValueError(f"Invalid external_history_choice: {external_history_choice}")
     print(
-        f"selecting inds {inds} for history given external_history_choice"
+        f"selecting inds {inds + max(0, step_idx - external_history_length)} as history for step {step_idx} given external_history_choice"
         f"{external_history_choice} over {len(historical_actions)} actions"
     )
     history_dict = {
-        # FIXME FIXME --> need to convert action numbers to strings w ECOT
         "steps": [
-            {"description": str(historical_actions[i]), "images": [historical_obs[i]]}
+            {
+                "description": ecot_classify_movement(
+                    historical_actions[i], threshold=0.001
+                )[0],
+                "images": [historical_obs[i]],
+            }
             for i in inds
         ]
     }
@@ -147,16 +154,15 @@ async def collect_actions(
 
         pred_actions = [res[0] for res in results]
         vlm_responses = [res[1] for res in results]
-        print(f"Collected {len(pred_actions)} actions for trajectory {traj_idx+1}")
-
+        print(f"Collected {len(pred_actions)} actions for trajectory {traj_idx + 1}")
         # Filter out any None values that might have been added during sequential processing
         valid_indices = [i for i, a in enumerate(pred_actions) if a is not None]
         collected_pred_actions = [pred_actions[i] for i in valid_indices]
         collected_gt_actions = [subsampled_gt_actions[i] for i in valid_indices]
-        breakpoint()
+
         # Make sure we have actions to process
         if not collected_pred_actions:
-            print(f"No valid actions collected for trajectory {traj_idx+1}, skipping")
+            print(f"No valid actions collected for trajectory {traj_idx + 1}, skipping")
             continue
 
         traj_actions = {

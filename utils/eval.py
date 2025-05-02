@@ -13,7 +13,6 @@ def compute_metrics(
     results = {}
 
     # MSE - Mean Squared Error
-    breakpoint()
     results["mse"] = np.mean(np.square(pred_actions - gt_actions))
 
     # MAE - Mean Absolute Error
@@ -78,9 +77,6 @@ def evaluate_actions(all_actions: list[dict]) -> dict[str, t.Any]:
 
     total_sq_diff = 0
     total_actions = 0
-    total_inference_time = 0
-    first_call_times = []
-    other_call_times = []
 
     for traj_data in all_actions:
         traj_idx = traj_data["traj_idx"]
@@ -97,7 +93,7 @@ def evaluate_actions(all_actions: list[dict]) -> dict[str, t.Any]:
         all_results.append(results)
 
         # Log results
-        print(f"Trajectory {traj_idx+1} metrics:")
+        print(f"Trajectory {traj_idx + 1} metrics:")
         print(f"  MSE: {results['mse']:.6f} (n={traj_data['num_actions']})")
         print(f"  MAE: {results['mae']:.6f}")
         print(f"  Normalized MSE: {results['nmse']:.6f}")
@@ -120,13 +116,6 @@ def evaluate_actions(all_actions: list[dict]) -> dict[str, t.Any]:
     overall_mse = total_sq_diff / total_actions
     print(f"Overall MSE (weighted): {overall_mse:.6f}")
 
-    # Compute first call and other call averages
-    avg_first_call = np.mean(first_call_times) if first_call_times else 0
-    avg_other_calls = np.mean(other_call_times) if other_call_times else 0
-
-    print(f"\nAverage first call time: {avg_first_call*1000:.2f}ms")
-    print(f"Average time (excluding first calls): {avg_other_calls*1000:.2f}ms")
-
     # Compute average of other metrics
     avg_metrics = {
         k: np.mean([r[k] for r in all_results])
@@ -139,23 +128,13 @@ def evaluate_actions(all_actions: list[dict]) -> dict[str, t.Any]:
             if "total" in k:
                 print(f"  {k}: {v:.2f}s")
             else:
-                print(f"  {k}: {v*1000:.2f}ms")
+                print(f"  {k}: {v * 1000:.2f}ms")
         else:
             print(f"  {k}: {v:.6f}")
-
-    # Add overall timing metrics
-    print(
-        f"\nTotal inference time across all trajectories: {total_inference_time:.2f}s"
-    )
-    print(f"Throughput: {total_actions/total_inference_time:.2f} actions/sec")
 
     return {
         "results": all_results,
         "avg_metrics": avg_metrics,
-        "first_call_avg": avg_first_call,
-        "other_calls_avg": avg_other_calls,
-        "total_inference_time": total_inference_time,
-        "throughput": total_actions / total_inference_time,
     }
 
 
@@ -284,7 +263,7 @@ def analyze_saved_results(
         print(
             f"Average action magnitude - Predicted: {avg_pred_mag:.6f}, Ground Truth: {avg_gt_mag:.6f}"
         )
-        print(f"Ratio (Pred/GT): {avg_pred_mag/avg_gt_mag:.6f}")
+        print(f"Ratio (Pred/GT): {avg_pred_mag / avg_gt_mag:.6f}")
 
         if avg_pred_mag < 0.1 * avg_gt_mag:
             print(

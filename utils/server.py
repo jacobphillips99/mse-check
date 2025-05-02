@@ -134,7 +134,7 @@ class PolicyClient:
                         print(f"Server returned error {response.status}: {error_text}")
                         if attempt < max_retries - 1:
                             print(
-                                f"Retrying in {retry_delay}s... (attempt {attempt+1}/{max_retries})"
+                                f"Retrying in {retry_delay}s... (attempt {attempt + 1} / {max_retries})"
                             )
                             await asyncio.sleep(retry_delay)
                             retry_delay *= 2  # Exponential backoff
@@ -146,28 +146,22 @@ class PolicyClient:
 
                     # Try to parse JSON, handle potential errors
                     try:
-                        action, vlm_response = await response.json()
-                    except aiohttp.client_exceptions.ContentTypeError:
-                        # Fallback to text if JSON parsing fails
-                        text_response = await response.text()
-                        print(
-                            f"Warning: Failed to parse JSON response: {text_response[:100]}..."
-                        )
-                        raise RuntimeError(
-                            "Server returned invalid response format (not JSON)"
-                        )
+                        res = await response.json()
+                    except Exception as e:
+                        print(f"Server returned non-JSON response: {e}")
+                        raise
 
-                    if type(action) not in (np.ndarray, list):
+                    if type(res["action"]) not in (np.ndarray, list):
                         raise RuntimeError(
                             "Policy server returned invalid action. It must return a numpy array or a list. Received: "
-                            + str(action)
+                            + str(res["action"])
                         )
-                    return action.copy(), vlm_response
+                    return res["action"].copy(), res["vlm_response"]
 
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 if attempt < max_retries - 1:
                     print(
-                        f"Request failed with error: {e}. Retrying in {retry_delay}s... (attempt {attempt+1}/{max_retries})"
+                        f"Request failed with error: {e}. Retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})"
                     )
                     await asyncio.sleep(retry_delay)
                     retry_delay *= 2  # Exponential backoff
