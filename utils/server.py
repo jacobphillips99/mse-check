@@ -1,9 +1,12 @@
 import asyncio
+import typing as t
 
 import aiohttp
+import json_numpy
 import numpy as np
 import requests
-import tgyping as t
+
+json_numpy.patch()
 
 
 def get_url(
@@ -90,8 +93,11 @@ class PolicyClient:
         return self
 
     async def async_call(
-        self, obs_dict: dict[str, t.Any], language_instruction: t.Optional[str] = None
-    ) -> np.ndarray:
+        self,
+        obs_dict: dict[str, t.Any],
+        language_instruction: t.Optional[str] = None,
+        history_dict: t.Optional[dict[str, t.Any]] = None,
+    ) -> tuple[np.ndarray, str]:
         """Async version of the call method"""
         assert "image_primary" in obs_dict.keys()
         assert isinstance(obs_dict["image_primary"], np.ndarray)
@@ -106,13 +112,20 @@ class PolicyClient:
         max_retries = 3
         retry_delay = 1.0
 
+        # have to manually jsonify the history dict for aiohttp
+        if history_dict is not None:
+            for step in history_dict["steps"]:
+                step["images"] = [im.tolist() for im in step["images"]]
+
         for attempt in range(max_retries):
             try:
                 async with self._async_session.post(
                     get_url(self.host, self.port, "act"),
                     json={
-                        "image": obs_dict["image_primary"],
+                        "image": obs_dict["image_primary"].tolist(),
                         "instruction": language_instruction,
+                        "history": history_dict,
+                        "test": True,
                     },
                     timeout=30,
                 ) as response:
@@ -133,7 +146,7 @@ class PolicyClient:
 
                     # Try to parse JSON, handle potential errors
                     try:
-                        action = await response.json()
+                        action, vlm_response = await response.json()
                     except aiohttp.client_exceptions.ContentTypeError:
                         # Fallback to text if JSON parsing fails
                         text_response = await response.text()
@@ -149,7 +162,7 @@ class PolicyClient:
                             "Policy server returned invalid action. It must return a numpy array or a list. Received: "
                             + str(action)
                         )
-                    return action.copy()
+                    return action.copy(), vlm_response
 
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 if attempt < max_retries - 1:

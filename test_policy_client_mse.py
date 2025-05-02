@@ -10,18 +10,21 @@ import datetime
 import os
 import pickle
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import draccus
 import json_numpy
 import numpy as np
 from tqdm import tqdm
-
 from utils.data import load_data
 from utils.eval import analyze_saved_results, evaluate_actions
 from utils.server import PolicyClient, get_url
 
 json_numpy.patch()
+
+
+RESULTS_DIR_PATH = str(Path(__file__).parent / "results")
 
 
 def assemble_history_dict(
@@ -42,21 +45,20 @@ def assemble_history_dict(
         - "third": include every third step
     """
     historical_obs = obs_list[max(0, step_idx - external_history_length) : step_idx]
-    # FIXME FIXME --> need to convert numbers to strings
     historical_actions = gt_actions[
         max(0, step_idx - external_history_length) : step_idx
     ]
     assert external_history_choice in ["all", "last", "first", "alternate", "third"]
     if external_history_choice == "all":
-        inds = np.arange(len(historical_actions))
+        inds = np.arange(len(historical_obs))
     elif external_history_choice == "last":
-        inds = [len(historical_actions) - 1]
+        inds = [len(historical_obs) - 1]
     elif external_history_choice == "first":
         inds = [0]
     elif external_history_choice == "alternate":
-        inds = np.arange(0, len(historical_actions), 2)
+        inds = np.arange(0, len(historical_obs), 2)
     elif external_history_choice == "third":
-        inds = np.arange(0, len(historical_actions), 3)
+        inds = np.arange(0, len(historical_obs), 3)
     else:
         raise ValueError(f"Invalid external_history_choice: {external_history_choice}")
     print(
@@ -64,6 +66,7 @@ def assemble_history_dict(
         f"{external_history_choice} over {len(historical_actions)} actions"
     )
     history_dict = {
+        # FIXME FIXME --> need to convert action numbers to strings w ECOT
         "steps": [
             {"description": str(historical_actions[i]), "images": [historical_obs[i]]}
             for i in inds
@@ -83,7 +86,6 @@ async def collect_actions(
     """
     Collect actions from the policy client.
     We support collecting actions in parallel or sequentially, but limited by each episode.
-
     """
     all_actions = []
     await policy_client.async_init()
@@ -151,7 +153,7 @@ async def collect_actions(
         valid_indices = [i for i, a in enumerate(pred_actions) if a is not None]
         collected_pred_actions = [pred_actions[i] for i in valid_indices]
         collected_gt_actions = [subsampled_gt_actions[i] for i in valid_indices]
-
+        breakpoint()
         # Make sure we have actions to process
         if not collected_pred_actions:
             print(f"No valid actions collected for trajectory {traj_idx+1}, skipping")
@@ -174,14 +176,15 @@ async def async_evaluate_policy(
     policy_client: PolicyClient,
     trajs: list[dict],
     subsample_rate: int = 10,
-    save_dir: str = "results",
+    save_dir: str = RESULTS_DIR_PATH,
     sequential: bool = False,
     model_name: str = "",
     external_history_length: Optional[int] = None,
     external_history_choice: Optional[str] = None,
 ) -> str:
     """First collect actions, save them, then compute metrics"""
-    os.makedirs(save_dir, exist_ok=True)
+    save_path = Path(save_dir)
+    save_path.mkdir(parents=True, exist_ok=True)
 
     # Create a timestamp string
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -253,7 +256,9 @@ class DeployConfig:
     host: str = "localhost"  # Policy server IP address
     port: int = 8000  # Policy server port
     subsample: int = 10  # Subsample rate for trajectory steps (every N steps)
-    save_dir: str = "results"  # Directory to save results
+    save_dir: str = (
+        RESULTS_DIR_PATH  # Directory to save results relative to script location
+    )
     analyze_only: bool = False  # Only analyze previously saved results
     sequential: bool = False  # Process observations one at a time instead of in batch
     model_name: str = ""  # Name of the model being evaluated
@@ -261,7 +266,6 @@ class DeployConfig:
         None  # Optional history length (how many steps to remember)
     )
     external_history_choice: Optional[str] = None
-    # You can add more fields as needed
 
 
 @draccus.wrap()
@@ -288,9 +292,8 @@ def deploy(cfg: DeployConfig) -> None:
                 external_history_length=cfg.external_history_length,
                 external_history_choice=cfg.external_history_choice,
             )
-            print(f"Metrics file saved to {metrics_file}")
-            # Additional analysis
-            analyze_saved_results(cfg.save_dir, model_name=cfg.model_name)
+        print(f"Metrics file saved to {metrics_file}")
+        analyze_saved_results(cfg.save_dir, model_name=cfg.model_name)
     finally:
         policy_client.close()
 

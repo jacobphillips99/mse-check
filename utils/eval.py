@@ -13,6 +13,7 @@ def compute_metrics(
     results = {}
 
     # MSE - Mean Squared Error
+    breakpoint()
     results["mse"] = np.mean(np.square(pred_actions - gt_actions))
 
     # MAE - Mean Absolute Error
@@ -85,34 +86,13 @@ def evaluate_actions(all_actions: list[dict]) -> dict[str, t.Any]:
         traj_idx = traj_data["traj_idx"]
         pred_actions = traj_data["pred_actions"]
         gt_actions = traj_data["gt_actions"]
-        inference_times = traj_data["inference_times"]
 
         # Extract first call time
-        first_call_time = traj_data.get(
-            "first_call_time", inference_times[0] if len(inference_times) > 0 else 0
-        )
-        first_call_times.append(first_call_time)
-
-        # Get remaining times (excluding first call)
-        if len(inference_times) > 1:
-            other_call_times.extend(inference_times[1:])
 
         # Compute metrics for this trajectory
         results = compute_metrics(pred_actions, gt_actions)
         results["traj_idx"] = traj_idx
         results["num_actions"] = traj_data["num_actions"]
-
-        # Add timing metrics
-        results["first_call_time"] = first_call_time
-        results["mean_inference_time"] = np.mean(inference_times)
-        results["mean_inference_time_excl_first"] = (
-            np.mean(inference_times[1:]) if len(inference_times) > 1 else 0
-        )
-        results["median_inference_time"] = np.median(inference_times)
-        results["min_inference_time"] = np.min(inference_times)
-        results["max_inference_time"] = np.max(inference_times)
-        results["std_inference_time"] = np.std(inference_times)
-        results["total_inference_time"] = np.sum(inference_times)
 
         all_results.append(results)
 
@@ -128,26 +108,9 @@ def evaluate_actions(all_actions: list[dict]) -> dict[str, t.Any]:
             f"  Action magnitude - Pred: {results['pred_mag']:.6f}, GT: {results['gt_mag']:.6f}, Ratio: {results['mag_ratio']:.6f}"
         )
 
-        # Print timing metrics with first call highlighted
-        print(f"  Timing - First call: {first_call_time*1000:.2f}ms")
-        print(
-            f"  Timing - Mean (excl. first): {results['mean_inference_time_excl_first']*1000:.2f}ms"
-        )
-        print(
-            f"  Timing - Mean (all calls): {results['mean_inference_time']*1000:.2f}ms"
-        )
-        print(f"  Timing - Median: {results['median_inference_time']*1000:.2f}ms")
-        print(
-            f"  Timing - Min: {results['min_inference_time']*1000:.2f}ms, Max: {results['max_inference_time']*1000:.2f}ms"
-        )
-        print(
-            f"  Timing - Std: {results['std_inference_time']*1000:.2f}ms, Total: {results['total_inference_time']:.2f}s"
-        )
-
         # Update totals for weighted average calculation
         total_sq_diff += np.sum(np.square(pred_actions - gt_actions))
         total_actions += traj_data["num_actions"]
-        total_inference_time += np.sum(inference_times)
 
     # Compute overall MSE (weighted by number of actions in each trajectory)
     if total_actions == 0:

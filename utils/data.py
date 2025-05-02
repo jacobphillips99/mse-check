@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 
 """
@@ -10,9 +12,11 @@ TASK_EDITS = {
     9: "remove the blue object from the drawer and put it on the lower left side of the table",
 }
 
+BRIDGE_FILE_PATH = Path(__file__).parent.parent / "bridge_v2_10_trajs.npy"
+
 
 def load_data() -> np.ndarray:
-    bridge_trajs = np.load("bridge_v2_10_trajs.npy", allow_pickle=True)
+    bridge_trajs = np.load(BRIDGE_FILE_PATH, allow_pickle=True)
     for k, v in TASK_EDITS.items():
         bridge_trajs[k]["language"][0] = v
     return bridge_trajs
