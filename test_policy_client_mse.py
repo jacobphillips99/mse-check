@@ -189,14 +189,18 @@ async def async_evaluate_policy(
     external_history_choice: Optional[str] = None,
 ) -> str:
     """First collect actions, save them, then compute metrics"""
-    save_path = Path(save_dir)
-    save_path.mkdir(parents=True, exist_ok=True)
+    # Create base directory structure
+    base_save_path = Path(save_dir) / model_name
+    base_save_path.mkdir(parents=True, exist_ok=True)
 
     # Create a timestamp string
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Create file prefix with model name if provided
-    file_prefix = f"{model_name}_{timestamp}" if model_name else timestamp
+    # Build file prefix based on history settings
+    if external_history_length is not None and external_history_choice is not None:
+        file_prefix = f"hist_len_{external_history_length}_hist_choice_{external_history_choice}_{timestamp}"
+    else:
+        file_prefix = timestamp
 
     # Step 1: Collect all actions
     all_actions = await collect_actions(
@@ -209,7 +213,7 @@ async def async_evaluate_policy(
     )
 
     # Step 2: Save raw actions to disk before computing any metrics
-    actions_file = f"{save_dir}/actions_{file_prefix}.pkl"
+    actions_file = str(base_save_path / f"actions_{file_prefix}.pkl")
     print(f"Saving {len(all_actions)} trajectories of actions to {actions_file}")
     with open(actions_file, "wb") as f:
         pickle.dump(all_actions, f)
@@ -217,15 +221,17 @@ async def async_evaluate_policy(
     # Step 3: Evaluate the actions
     results = evaluate_actions(all_actions)
 
-    # Save the computed metrics
-    metrics_file = f"{save_dir}/metrics_{file_prefix}.pkl"
-    with open(metrics_file, "wb") as f:
-        pickle.dump(results, f)
-
     # Also save the files with timestamp and model name in the results object
     results["timestamp"] = timestamp
     results["model_name"] = model_name
-    results["files"] = {"actions": actions_file, "metrics": metrics_file}
+    results["history_length"] = external_history_length
+    results["history_choice"] = external_history_choice
+    # Save the computed metrics
+
+    metrics_file = str(base_save_path / f"metrics_{file_prefix}.pkl")
+    with open(metrics_file, "wb") as f:
+        pickle.dump(results, f)
+
     return metrics_file
 
 
@@ -267,7 +273,7 @@ class DeployConfig:
     )
     analyze_only: bool = False  # Only analyze previously saved results
     sequential: bool = False  # Process observations one at a time instead of in batch
-    model_name: str = ""  # Name of the model being evaluated
+    model_name: Optional[str] = None  # Name of the model being evaluated
     external_history_length: Optional[int] = (
         None  # Optional history length (how many steps to remember)
     )
@@ -277,6 +283,7 @@ class DeployConfig:
 @draccus.wrap()
 def deploy(cfg: DeployConfig) -> None:
     # Create policy client
+    assert cfg.model_name is not None, "model_name must be provided; received None"
     policy_client = PolicyClient(host=cfg.host, port=cfg.port)
     print(f"Connecting to policy server at {get_url(cfg.host, cfg.port, '')}")
 
