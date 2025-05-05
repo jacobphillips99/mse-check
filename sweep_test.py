@@ -7,7 +7,9 @@ Runs multiple configurations and analyzes the results
 import itertools
 import multiprocessing
 import typing as t
+from dataclasses import dataclass
 
+import draccus
 from test_policy_client_mse import DeployConfig, deploy
 
 
@@ -51,23 +53,34 @@ def history_sweep(
 
     param_grid = {
         **base_config,
-        "external_history_length": [10],
+        "external_history_length": [2, 4, 8, 16, 32],
         "external_history_choice": ["all", "last", "first", "alternate", "third"],
     }
 
     run_parallel_sweep(param_grid=param_grid, num_workers=num_workers)
 
 
-if __name__ == "__main__":
+@dataclass
+class SweepConfig:
+    n_iters: int = 1
+
+
+@draccus.wrap()
+def main(cfg: SweepConfig) -> None:
     # Example usage - uncomment the sweep you want to run
 
     # Base configuration shared across sweeps
     base_config = {
         "host": "localhost",
         "port": 8000,
-        "sequential": False,
-        "model_name": "gemini-2-5-pro",
+        "sequential": True,
+        "model_name": "claude-3-7-sonnet",
     }
 
     # History parameter sweep
-    history_sweep(base_config, num_workers=2)
+    for _ in range(cfg.n_iters):
+        history_sweep(base_config, num_workers=1)
+
+
+if __name__ == "__main__":
+    main()

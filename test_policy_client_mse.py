@@ -10,7 +10,7 @@ import datetime
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import draccus
 import json_numpy
@@ -51,13 +51,18 @@ def assemble_history_dict(
     historical_actions = gt_actions[
         max(0, step_idx - external_history_length) : step_idx
     ]
+
+    # Handle empty history case
+    if len(historical_obs) == 0 or len(historical_actions) == 0:
+        return {"steps": []}
+
     assert external_history_choice in ["all", "last", "first", "alternate", "third"]
     if external_history_choice == "all":
         inds = np.arange(len(historical_obs))
     elif external_history_choice == "last":
-        inds = [len(historical_obs) - 1]
+        inds = np.array([max(0, len(historical_obs) - 1)])  # Ensure non-negative
     elif external_history_choice == "first":
-        inds = [0]
+        inds = np.array([0])
     elif external_history_choice == "alternate":
         inds = np.arange(0, len(historical_obs), 2)
     elif external_history_choice == "third":
@@ -68,18 +73,18 @@ def assemble_history_dict(
         f"selecting inds {inds + max(0, step_idx - external_history_length)} as history for step {step_idx} given external_history_choice"
         f"{external_history_choice} over {len(historical_actions)} actions"
     )
-    history_dict = {
-        "steps": [
-            {
-                "description": ecot_classify_movement(
-                    historical_actions[i], threshold=0.001
-                )[0],
-                "images": [historical_obs[i]],
-            }
-            for i in inds
-        ]
-    }
-    return history_dict
+
+    steps = []
+    for i in inds:
+        if i < 0 or i >= len(historical_actions) or i >= len(historical_obs):
+            continue
+        desc, _ = ecot_classify_movement(historical_actions[i], threshold=0.001)
+        step = {
+            "description": desc,
+            "images": [historical_obs[i]],
+        }
+        steps.append(step)
+    return {"steps": steps}
 
 
 async def collect_actions(
@@ -139,36 +144,84 @@ async def collect_actions(
             f"setup {len(payloads)} payloads for {'sequential' if sequential else 'parallel'} execution"
         )
 
+        results = []
         if sequential:
-            results = []
             for i, payload in enumerate(payloads):
                 if i < 2:
                     continue
-                res = policy_client(**payload)
-                results.append(res)
+                try:
+                    res = policy_client(**payload)
+                    results.append(res)
+                except Exception as e:
+                    print(f"Error processing payload {i} in trajectory {traj_idx}: {e}")
+                    # Add None placeholder to keep indices aligned with payloads
+                    results.append((None, f"Error: {str(e)}"))
         else:
-            results = await asyncio.gather(
-                *(policy_client.async_call(**payload) for payload in payloads),
-                return_exceptions=False,
-            )
+            try:
+                # Process all payloads in parallel but handle exceptions for each one
+                async_results: list[tuple[Any, str] | Exception] = await asyncio.gather(
+                    *(policy_client.async_call(**payload) for payload in payloads),
+                    return_exceptions=True,
+                )
 
-        pred_actions = [res[0] for res in results]
-        vlm_responses = [res[1] for res in results]
-        print(f"Collected {len(pred_actions)} actions for trajectory {traj_idx + 1}")
-        # Filter out any None values that might have been added during sequential processing
-        valid_indices = [i for i, a in enumerate(pred_actions) if a is not None]
-        collected_pred_actions = [pred_actions[i] for i in valid_indices]
+                # Convert exceptions to None and log them
+                for i, res in enumerate(async_results):
+                    if isinstance(res, Exception):
+                        print(
+                            f"Error processing payload {i} in trajectory {traj_idx}: {res}"
+                        )
+                        results.append((None, f"Error: {str(res)}"))
+                    else:
+                        # Type checker needs help understanding this is a tuple now
+                        action_response: tuple[Optional[np.ndarray], str] = res
+                        results.append(action_response)
+            except Exception as e:
+                print(
+                    f"Fatal error during parallel processing for trajectory {traj_idx}: {e}"
+                )
+                continue  # Skip this trajectory entirely
+
+        # Skip this trajectory if all results are errors
+        if all(
+            isinstance(r, Exception) or (isinstance(r, tuple) and r[0] is None)
+            for r in results
+        ):
+            print(f"All actions failed for trajectory {traj_idx + 1}, skipping")
+            continue
+
+        # Extract actions and VLM responses, handling any None values
+        pred_actions = []
+        vlm_responses = []
+        valid_indices = []
+
+        for i, res in enumerate(results):
+            if (
+                not isinstance(res, Exception)
+                and isinstance(res, tuple)
+                and len(res) == 2
+            ):
+                action, response = res
+                if action is not None:
+                    pred_actions.append(action)
+                    vlm_responses.append(response)
+                    valid_indices.append(i)
+
+        print(
+            f"Collected {len(pred_actions)} valid actions for trajectory {traj_idx + 1}"
+        )
+
+        # Match ground truth actions with successfully predicted actions
         collected_gt_actions = [subsampled_gt_actions[i] for i in valid_indices]
 
         # Make sure we have actions to process
-        if not collected_pred_actions:
+        if not pred_actions:
             print(f"No valid actions collected for trajectory {traj_idx + 1}, skipping")
             continue
 
         traj_actions = {
             "traj_idx": traj_idx,
             "instruction": language_instruction,
-            "pred_actions": np.array(collected_pred_actions),
+            "pred_actions": np.array(pred_actions),
             "gt_actions": np.array(collected_gt_actions),
             "num_actions": len(collected_gt_actions),
             "vlm_responses": vlm_responses,
