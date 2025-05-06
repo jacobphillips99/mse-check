@@ -73,13 +73,13 @@ def main(cfg: SweepConfig) -> None:
     base_config = {
         "host": "localhost",
         "port": 8000,
-        "sequential": True,
-        "model_name": "claude-3-7-sonnet",
+        "sequential": False,
+        "model_name": "gemini-2-5-pro",
     }
 
     # History parameter sweep
     for _ in range(cfg.n_iters):
-        history_sweep(base_config, num_workers=1)
+        history_sweep(base_config, num_workers=2)
 
 
 if __name__ == "__main__":

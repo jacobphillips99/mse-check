@@ -159,7 +159,7 @@ async def collect_actions(
         else:
             try:
                 # Process all payloads in parallel but handle exceptions for each one
-                async_results: list[tuple[Any, str] | Exception] = await asyncio.gather(
+                async_results = await asyncio.gather(
                     *(policy_client.async_call(**payload) for payload in payloads),
                     return_exceptions=True,
                 )
