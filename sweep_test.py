@@ -53,7 +53,8 @@ def history_sweep(
 
     param_grid = {
         **base_config,
-        "external_history_length": [2, 4, 8, 16, 32],
+        # "external_history_length": [2, 4, 8, 16, 32],
+        "external_history_length": [0, 1, 10],
         "external_history_choice": ["all", "last", "first", "alternate", "third"],
     }
 
@@ -74,12 +75,12 @@ def main(cfg: SweepConfig) -> None:
         "host": "localhost",
         "port": 8000,
         "sequential": False,
-        "model_name": "gemini-2-5-pro",
+        "model_name": "gpt-4o",
     }
 
     # History parameter sweep
     for _ in range(cfg.n_iters):
-        history_sweep(base_config, num_workers=2)
+        history_sweep(base_config, num_workers=5)
 
 
 if __name__ == "__main__":

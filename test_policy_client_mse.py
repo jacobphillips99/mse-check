@@ -8,6 +8,7 @@ Pulled from https://github.com/zhouzypaul/mse-check/blob/main/test_policy_client
 import asyncio
 import datetime
 import pickle
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
@@ -153,9 +154,13 @@ async def collect_actions(
                     res = policy_client(**payload)
                     results.append(res)
                 except Exception as e:
-                    print(f"Error processing payload {i} in trajectory {traj_idx}: {e}")
+                    print(
+                        f"Error processing payload {i} in trajectory {traj_idx}: {e}; Traceback: {traceback.format_exc()}"
+                    )
                     # Add None placeholder to keep indices aligned with payloads
-                    results.append((None, f"Error: {str(e)}"))
+                    results.append(
+                        (None, f"Error: {str(e)}; Traceback: {traceback.format_exc()}")
+                    )
         else:
             try:
                 # Process all payloads in parallel but handle exceptions for each one
@@ -177,7 +182,7 @@ async def collect_actions(
                         results.append(action_response)
             except Exception as e:
                 print(
-                    f"Fatal error during parallel processing for trajectory {traj_idx}: {e}"
+                    f"Fatal error during parallel processing for trajectory {traj_idx}: {e}; Traceback: {traceback.format_exc()}"
                 )
                 continue  # Skip this trajectory entirely
 
