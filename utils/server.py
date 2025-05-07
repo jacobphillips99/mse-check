@@ -1,4 +1,5 @@
 import asyncio
+import traceback
 import typing as t
 
 import aiohttp
@@ -127,7 +128,7 @@ class PolicyClient:
                         "history": history_dict,
                         "test": True,
                     },
-                    timeout=30,
+                    timeout=60,
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
@@ -161,7 +162,7 @@ class PolicyClient:
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 if attempt < max_retries - 1:
                     print(
-                        f"Request failed with error: {e}. Retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})"
+                        f"Request failed with error: {e}; traceback: {traceback.format_exc()}. Retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})"
                     )
                     await asyncio.sleep(retry_delay)
                     retry_delay *= 2  # Exponential backoff

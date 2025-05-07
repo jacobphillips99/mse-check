@@ -70,10 +70,6 @@ def assemble_history_dict(
         inds = np.arange(0, len(historical_obs), 3)
     else:
         raise ValueError(f"Invalid external_history_choice: {external_history_choice}")
-    print(
-        f"selecting inds {inds + max(0, step_idx - external_history_length)} as history for step {step_idx} given external_history_choice"
-        f"{external_history_choice} over {len(historical_actions)} actions"
-    )
 
     steps = []
     for i in inds:
@@ -86,6 +82,52 @@ def assemble_history_dict(
         }
         steps.append(step)
     return {"steps": steps}
+
+
+def run_sequential_episode(
+    policy_client: PolicyClient, traj_idx: int, payloads: list[dict]
+) -> list[tuple[Optional[np.ndarray], str]]:
+    results = []
+    for i, payload in enumerate(payloads):
+        if i < 2:
+            continue
+    try:
+        res = policy_client(**payload)
+        results.append(res)
+    except Exception as e:
+        print(
+            f"Error processing payload {i} in trajectory {traj_idx}: {e}; Traceback: {traceback.format_exc()}"
+        )
+        # Add None placeholder to keep indices aligned with payloads
+        results.append((None, f"Error: {str(e)}; Traceback: {traceback.format_exc()}"))
+    return results
+
+
+async def run_async_episode(
+    policy_client: PolicyClient, traj_idx: int, payloads: list[dict]
+) -> list[tuple[Optional[np.ndarray], str]]:
+    results = []
+    try:
+        # Process all payloads in parallel but handle exceptions for each one
+        async_results = await asyncio.gather(
+            *(policy_client.async_call(**payload) for payload in payloads),
+            return_exceptions=True,
+        )
+
+        # Convert exceptions to None and log them
+        for i, res in enumerate(async_results):
+            if isinstance(res, Exception):
+                print(f"Error processing payload {i} in trajectory {traj_idx}: {res}")
+                results.append((None, f"Error: {str(res)}"))
+            else:
+                # Type checker needs help understanding this is a tuple now
+                action_response: tuple[Optional[np.ndarray], str] = res
+                results.append(action_response)
+    except Exception as e:
+        print(
+            f"Fatal error during parallel processing for trajectory {traj_idx}: {e}; Traceback: {traceback.format_exc()}"
+        )
+    return results
 
 
 async def collect_actions(
@@ -141,50 +183,10 @@ async def collect_actions(
                 )
             )
 
-        print(
-            f"setup {len(payloads)} payloads for {'sequential' if sequential else 'parallel'} execution"
-        )
-
-        results = []
         if sequential:
-            for i, payload in enumerate(payloads):
-                if i < 2:
-                    continue
-                try:
-                    res = policy_client(**payload)
-                    results.append(res)
-                except Exception as e:
-                    print(
-                        f"Error processing payload {i} in trajectory {traj_idx}: {e}; Traceback: {traceback.format_exc()}"
-                    )
-                    # Add None placeholder to keep indices aligned with payloads
-                    results.append(
-                        (None, f"Error: {str(e)}; Traceback: {traceback.format_exc()}")
-                    )
+            results = run_sequential_episode(policy_client, traj_idx, payloads)
         else:
-            try:
-                # Process all payloads in parallel but handle exceptions for each one
-                async_results = await asyncio.gather(
-                    *(policy_client.async_call(**payload) for payload in payloads),
-                    return_exceptions=True,
-                )
-
-                # Convert exceptions to None and log them
-                for i, res in enumerate(async_results):
-                    if isinstance(res, Exception):
-                        print(
-                            f"Error processing payload {i} in trajectory {traj_idx}: {res}"
-                        )
-                        results.append((None, f"Error: {str(res)}"))
-                    else:
-                        # Type checker needs help understanding this is a tuple now
-                        action_response: tuple[Optional[np.ndarray], str] = res
-                        results.append(action_response)
-            except Exception as e:
-                print(
-                    f"Fatal error during parallel processing for trajectory {traj_idx}: {e}; Traceback: {traceback.format_exc()}"
-                )
-                continue  # Skip this trajectory entirely
+            results = await run_async_episode(policy_client, traj_idx, payloads)
 
         # Skip this trajectory if all results are errors
         if all(
@@ -210,10 +212,6 @@ async def collect_actions(
                     pred_actions.append(action)
                     vlm_responses.append(response)
                     valid_indices.append(i)
-
-        print(
-            f"Collected {len(pred_actions)} valid actions for trajectory {traj_idx + 1}"
-        )
 
         # Match ground truth actions with successfully predicted actions
         collected_gt_actions = [subsampled_gt_actions[i] for i in valid_indices]
