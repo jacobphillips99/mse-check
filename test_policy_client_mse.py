@@ -11,7 +11,7 @@ import pickle
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import draccus
 import json_numpy
@@ -21,7 +21,7 @@ from utils.data import load_data
 from utils.eval import analyze_saved_results, evaluate_actions
 from utils.server import PolicyClient, get_url
 
-from vlm_autoeval_robot_benchmark.utils.ecot_primitives.ecot_primitive_movements import (
+from mallet.utils.ecot_primitives.ecot_primitive_movements import (
     classify_movement as ecot_classify_movement,
 )
 
@@ -89,17 +89,17 @@ def run_sequential_episode(
 ) -> list[tuple[Optional[np.ndarray], str]]:
     results = []
     for i, payload in enumerate(payloads):
-        if i < 2:
-            continue
-    try:
-        res = policy_client(**payload)
-        results.append(res)
-    except Exception as e:
-        print(
-            f"Error processing payload {i} in trajectory {traj_idx}: {e}; Traceback: {traceback.format_exc()}"
-        )
-        # Add None placeholder to keep indices aligned with payloads
-        results.append((None, f"Error: {str(e)}; Traceback: {traceback.format_exc()}"))
+        try:
+            res = policy_client(**payload)
+            results.append(res)
+        except Exception as e:
+            print(
+                f"Error processing payload {i} in trajectory {traj_idx}: {e}; Traceback: {traceback.format_exc()}"
+            )
+            # Add None placeholder to keep indices aligned with payloads
+            results.append(
+                (None, f"Error: {str(e)}; Traceback: {traceback.format_exc()}")
+            )
     return results
 
 
@@ -116,7 +116,7 @@ async def run_async_episode(
 
         # Convert exceptions to None and log them
         for i, res in enumerate(async_results):
-            if isinstance(res, Exception):
+            if isinstance(res, Exception) or isinstance(res, tuple) and res[0] is None:
                 print(f"Error processing payload {i} in trajectory {traj_idx}: {res}")
                 results.append((None, f"Error: {str(res)}"))
             else:
