@@ -53,9 +53,7 @@ def history_sweep(
 
     param_grid = {
         **base_config,
-        # "external_history_length": [2, 4, 8, 16, 32],
-        "external_history_length": [16, 32],
-        # "external_history_length": [0, 1],  # , 10],
+        "external_history_length": [1, 2, 4, 8, 16, 32],
         "external_history_choice": ["all", "last", "first", "alternate", "third"],
     }
 
@@ -74,7 +72,7 @@ def main(cfg: SweepConfig) -> None:
     # Base configuration shared across sweeps
     base_config = {
         "host": "localhost",
-        "port": 8002,
+        "port": 8000,
         "sequential": False,
         "model_name": "gemini-2-5-pro",
     }

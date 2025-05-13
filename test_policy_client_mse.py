@@ -68,6 +68,8 @@ def assemble_history_dict(
         inds = np.arange(0, len(historical_obs), 2)
     elif external_history_choice == "third":
         inds = np.arange(0, len(historical_obs), 3)
+    elif external_history_choice.lower() == "none":
+        inds = []
     else:
         raise ValueError(f"Invalid external_history_choice: {external_history_choice}")
 
