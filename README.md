@@ -10,28 +10,14 @@ This tool provides a framework for:
 - Supporting both sequential and parallel action collection
 - Handling historical context with configurable history lengths and sampling strategies
 
-## Installation
-
-### Dependencies
-- numpy
-- draccus
-- json_numpy
-- tqdm
-- asyncio
-- pickle
-
-Install dependencies using:
-```bash
-uv pip install numpy draccus json-numpy tqdm
-```
 
 ## Usage
 
-1. First, ensure your policy server is running at your desired `<server_ip>:<server_port>`
+1. First, ensure your policy server is running at your desired `<server_ip>:<server_port>` using the `mallet` toolkit.
 
 2. Run the evaluation script:
 ```bash
-python test_policy_client_mse.py --ip <server_ip> --port <server_port>
+python eval.py --ip <server_ip> --port <server_port>
 ```
 
 ### Advanced Configuration
@@ -51,13 +37,14 @@ config = DeployConfig(
     external_history_choice=None   # How to sample historical steps
 )
 ```
+The keyword `external` is used to specify here that the evaluation code is constructing the history and submitting it to the server instead of the server providing the history. This allows for asynchronous evaluation instead of time-synchronous evaluation.
 
 ### History Options
 
 When using historical context, the following sampling strategies are available:
 - `"all"`: Include all historical steps
-- `"last"`: Include only the last step
-- `"first"`: Include only the first step
+- `"last"`: Include only the last (most recent) step
+- `"first"`: Include only the first (oldest) step
 - `"alternate"`: Include every other step
 - `"third"`: Include every third step
 

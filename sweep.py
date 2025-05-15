@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Hyperparameter sweep script for test_policy_client_mse.py
+Hyperparameter sweep script for eval.py
 Runs multiple configurations and analyzes the results
 """
 
@@ -10,7 +10,7 @@ import typing as t
 from dataclasses import dataclass
 
 import draccus
-from test_policy_client_mse import DeployConfig, deploy
+from eval import DeployConfig, deploy
 
 
 def run_single_experiment(params: dict[str, t.Any]) -> None:
@@ -20,6 +20,7 @@ def run_single_experiment(params: dict[str, t.Any]) -> None:
 
 
 def run_parallel_sweep(
+    config: dict[str, t.Any],
     param_grid: dict[str, list[t.Any]],
     num_workers: int = 2,
 ) -> list[dict[str, t.Any]]:
@@ -35,7 +36,7 @@ def run_parallel_sweep(
     all_params = []
     for combo in combinations:
         params = {keys[i]: combo[i] for i in range(len(keys))}
-        all_params.append(params)
+        all_params.append({**config, **params})
 
     # Run experiments in parallel
     with multiprocessing.Pool(num_workers) as pool:
@@ -44,42 +45,35 @@ def run_parallel_sweep(
     return all_params
 
 
-def history_sweep(
-    base_config: t.Optional[dict[str, t.Any]] = None, num_workers: int = 2
-) -> None:
-    """Run a sweep over history length and history choice parameters"""
-    if base_config is None:
-        base_config = {}
-
-    param_grid = {
-        **base_config,
-        "external_history_length": [1, 2, 4, 8, 16, 32],
-        "external_history_choice": ["all", "last", "first", "alternate", "third"],
-    }
-
-    run_parallel_sweep(param_grid=param_grid, num_workers=num_workers)
-
-
 @dataclass
 class SweepConfig:
     n_iters: int = 1
+    host: str = "localhost"
+    port: int = 8000
+    sequential: bool = False
+    model_name: str = "gpt-4o-mini"
 
 
 @draccus.wrap()
 def main(cfg: SweepConfig) -> None:
-    # Example usage - uncomment the sweep you want to run
+    history_lengths = [0, 1, 2, 4, 8, 16, 32]
+    history_choices = ["all", "last", "first", "alternate", "third"]
 
     # Base configuration shared across sweeps
     base_config = {
-        "host": "localhost",
-        "port": 8000,
-        "sequential": False,
-        "model_name": "gemini-2-5-pro",
+        "host": cfg.host,
+        "port": cfg.port,
+        "sequential": cfg.sequential,
+        "model_name": cfg.model_name,
+    }
+    param_grid = {
+        "external_history_length": history_lengths,
+        "external_history_choice": history_choices,
     }
 
     # History parameter sweep
     for _ in range(cfg.n_iters):
-        history_sweep(base_config, num_workers=1)
+        run_parallel_sweep(config=base_config, param_grid=param_grid, num_workers=1)
 
 
 if __name__ == "__main__":

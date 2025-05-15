@@ -323,17 +323,17 @@ def evaluate_policy(
 @dataclass
 class DeployConfig:
     # Server Configuration
-    host: str = "localhost"  # Policy server IP address
-    port: int = 8000  # Policy server port
-    subsample: int = 10  # Subsample rate for trajectory steps (every N steps)
+    host: str = "localhost"  
+    port: int = 8000  
+    subsample: int = 10  
     save_dir: str = (
-        RESULTS_DIR_PATH  # Directory to save results relative to script location
+        RESULTS_DIR_PATH  
     )
-    analyze_only: bool = False  # Only analyze previously saved results
-    sequential: bool = False  # Process observations one at a time instead of in batch
-    model_name: Optional[str] = None  # Name of the model being evaluated
+    analyze_only: bool = False  
+    sequential: bool = False  
+    model_name: Optional[str] = None  
     external_history_length: Optional[int] = (
-        None  # Optional history length (how many steps to remember)
+        None 
     )
     external_history_choice: Optional[str] = None
 
