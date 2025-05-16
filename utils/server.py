@@ -80,6 +80,10 @@ class PolicyClient:
         response = self._session.post(url, json=request_data)
         resp = response.json()
 
+        if isinstance(resp, list):
+            # VLA policies return a list of actions, repackage for consistency
+            resp = {"action": resp, "vlm_response": ""}
+
         if type(resp["action"]) not in (np.ndarray, list):
             raise RuntimeError(
                 "Policy server returned invalid action. It must return a numpy array or a list. Received: "

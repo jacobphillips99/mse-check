@@ -3,6 +3,9 @@ Test the sanity of the policy from a policy client,
 by computing various metrics against ground-truth actions from 10 trajs sampled from Bridge V2
 
 Pulled from https://github.com/zhouzypaul/mse-check/blob/main/test_policy_client_mse.py
+
+`External history` here means that the evaluation code is constructing and delivering the history to the policy client,
+instead of the server internally managing the history.
 """
 
 import asyncio
@@ -18,7 +21,7 @@ import json_numpy
 import numpy as np
 from tqdm import tqdm
 from utils.data import load_data
-from utils.eval import analyze_saved_results, evaluate_actions
+from utils.metrics import analyze_saved_results, evaluate_actions
 from utils.server import PolicyClient, get_url
 
 from mallet.utils.ecot_primitives.ecot_primitive_movements import (
@@ -115,7 +118,6 @@ async def run_async_episode(
             *(policy_client.async_call(**payload) for payload in payloads),
             return_exceptions=True,
         )
-
         # Convert exceptions to None and log them
         for i, res in enumerate(async_results):
             if isinstance(res, Exception) or isinstance(res, tuple) and res[0] is None:
@@ -139,6 +141,7 @@ async def collect_actions(
     sequential: bool = False,
     external_history_length: Optional[int] = None,
     external_history_choice: Optional[str] = None,
+    skip_reset: bool = False,
 ) -> list[dict]:
     """
     Collect actions from the policy client.
@@ -150,7 +153,8 @@ async def collect_actions(
     for traj_idx, traj in enumerate(
         tqdm(trajs, desc=f"Collecting actions with subsample rate {subsample_rate}")
     ):
-        await policy_client.server_reset()
+        if not skip_reset:
+            await policy_client.server_reset()
         obs_list = [t["images0"] for t in traj["observations"]]  # list of obs
         gt_actions = traj["actions"]  # list of ground truth actions
         language_instruction = traj["language"][0] if "language" in traj else None
@@ -245,6 +249,7 @@ async def async_evaluate_policy(
     model_name: str = "",
     external_history_length: Optional[int] = None,
     external_history_choice: Optional[str] = None,
+    skip_reset: bool = False,
 ) -> str:
     """First collect actions, save them, then compute metrics"""
     # Create base directory structure
@@ -268,6 +273,7 @@ async def async_evaluate_policy(
         sequential,
         external_history_length,
         external_history_choice,
+        skip_reset,
     )
 
     # Step 2: Save raw actions to disk before computing any metrics
@@ -302,6 +308,7 @@ def evaluate_policy(
     model_name: str = "",
     external_history_length: Optional[int] = None,
     external_history_choice: Optional[str] = None,
+    skip_reset: bool = False,
 ) -> str:
     """
     Evaluate the policy using the policy client.
@@ -316,6 +323,7 @@ def evaluate_policy(
             model_name,
             external_history_length,
             external_history_choice,
+            skip_reset,
         )
     )
 
@@ -336,7 +344,7 @@ class DeployConfig:
         None 
     )
     external_history_choice: Optional[str] = None
-
+    skip_reset: bool = False
 
 @draccus.wrap()
 def deploy(cfg: DeployConfig) -> None:
@@ -362,6 +370,7 @@ def deploy(cfg: DeployConfig) -> None:
                 model_name=cfg.model_name,
                 external_history_length=cfg.external_history_length,
                 external_history_choice=cfg.external_history_choice,
+                skip_reset=cfg.skip_reset,
             )
         print(f"Metrics file saved to {metrics_file}")
         analyze_saved_results(cfg.save_dir, model_name=cfg.model_name)

@@ -139,13 +139,14 @@ def evaluate_actions(all_actions: list[dict]) -> dict[str, t.Any]:
 
 
 def analyze_saved_results(
-    save_dir: str = "results",
+    save_dir: str,
     timestamp: t.Optional[str] = None,
     host: t.Optional[str] = None,
     port: t.Optional[int] = None,
     model_name: t.Optional[str] = None,
 ) -> None:
     """Analyze saved results to identify potential issues"""
+    save_dir = os.path.join(save_dir, model_name) if model_name else save_dir
     try:
         # If all specific identifiers are provided, use them to load specific files
         if timestamp and host and port:
@@ -193,9 +194,8 @@ def analyze_saved_results(
             action_files = [
                 f
                 for f in files
-                if model_name in f and f.startswith("actions_") and f.endswith(".pkl")
+                if f.startswith("actions_") and f.endswith(".pkl")
             ]
-
             if not action_files:
                 print(f"No files found for model {model_name}")
                 return
