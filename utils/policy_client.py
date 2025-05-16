@@ -3,26 +3,18 @@ import traceback
 import typing as t
 import json
 
+import logging
 import aiohttp
 import json_numpy
 import numpy as np
 import requests
 
+from mallet.utils import get_url
+
 json_numpy.patch()
 
-
-def get_url(
-    host: str, port: int, endpoint: str | None = None, protocol: str = "http://"
-):
-    """
-    Get the URL for a given host and port; if port is negative, skip it.
-    Cleans the host and endpoint strings
-    """
-    # Remove http:// or https:// from host if present,
-    host_str = host.replace("http://", "").replace("https://", "")
-    port_str = f":{port}" if int(port) >= 0 else ""
-    endpoint_str = f"/{endpoint.lstrip('/')}" if endpoint else ""
-    return f"{protocol}{host_str}{port_str}{endpoint_str}"
+# Suppress asyncio logging
+logging.getLogger("asyncio").setLevel(logging.CRITICAL)
 
 
 class PolicyClient:
@@ -98,13 +90,7 @@ class PolicyClient:
     async def async_init(self) -> "PolicyClient":
         """Initialize the async session if it doesn't exist"""
         if self._async_session is None:
-            self._async_session = aiohttp.ClientSession(
-                connector=aiohttp.TCPConnector(
-                    force_close=True,
-                    limit=64,
-                    enable_cleanup_closed=True,
-                )
-            )
+            self._async_session = aiohttp.ClientSession()
         return self
 
     async def async_call(

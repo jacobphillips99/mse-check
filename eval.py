@@ -24,8 +24,8 @@ import numpy as np
 from tqdm import tqdm
 from utils.data import load_data
 from utils.metrics import analyze_saved_results, evaluate_actions
-from utils.policy_client import PolicyClient, get_url
-
+from utils.policy_client import PolicyClient
+from mallet.utils import get_url
 from mallet.utils.ecot_primitives.ecot_primitive_movements import (
     classify_movement as ecot_classify_movement,
 )
