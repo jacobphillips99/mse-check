@@ -98,7 +98,13 @@ class PolicyClient:
     async def async_init(self) -> "PolicyClient":
         """Initialize the async session if it doesn't exist"""
         if self._async_session is None:
-            self._async_session = aiohttp.ClientSession()
+            self._async_session = aiohttp.ClientSession(
+                connector=aiohttp.TCPConnector(
+                    force_close=True,
+                    limit=64,
+                    enable_cleanup_closed=True,
+                )
+            )
         return self
 
     async def async_call(
