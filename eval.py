@@ -6,6 +6,8 @@ Pulled from https://github.com/zhouzypaul/mse-check/blob/main/test_policy_client
 
 `External history` here means that the evaluation code is constructing and delivering the history to the policy client,
 instead of the server internally managing the history.
+
+For evaluating VLA policies, we reccomend using `skip_reset=True` as the VLA server is unaffected by the reset.
 """
 
 import asyncio
@@ -22,7 +24,7 @@ import numpy as np
 from tqdm import tqdm
 from utils.data import load_data
 from utils.metrics import analyze_saved_results, evaluate_actions
-from utils.server import PolicyClient, get_url
+from utils.policy_client import PolicyClient, get_url
 
 from mallet.utils.ecot_primitives.ecot_primitive_movements import (
     classify_movement as ecot_classify_movement,

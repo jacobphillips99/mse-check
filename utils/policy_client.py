@@ -1,6 +1,7 @@
 import asyncio
 import traceback
 import typing as t
+import json
 
 import aiohttp
 import json_numpy
@@ -61,6 +62,9 @@ class PolicyClient:
         language_instruction: t.Optional[str] = None,
         history_dict: t.Optional[dict[str, t.Any]] = None,
     ) -> tuple[np.ndarray, str]:
+        """
+        Synchronous version of the call method.
+        """
         assert "image_primary" in obs_dict.keys()
         assert isinstance(obs_dict["image_primary"], np.ndarray)
         assert len(obs_dict["image_primary"].shape) == 3, obs_dict[
@@ -146,24 +150,65 @@ class PolicyClient:
                             continue
                         else:
                             raise RuntimeError(
-                                f"Server returned status {response.status} after {max_retries} attempts"
+                                f"Server returned status {response.status} after {max_retries} attempts. Body: {error_text[:500]}"
                             )
 
                     # Try to parse JSON, handle potential errors
                     try:
-                        res = await response.json()
-                    except Exception as e:
-                        print(f"Server returned non-JSON response: {e}")
-                        raise
+                        # json_numpy.patch() ensures that np.ndarray might be parsed directly
+                        original_json_response = await response.json()
+                    except aiohttp.client_exceptions.ContentTypeError as e:
+                        # This occurs if the response content-type is not JSON (e.g. HTML error page)
+                        error_text = await response.text()
+                        print(f"Server returned non-JSON content (status {response.status}). Body preview: {error_text[:500]}. Error: {e}")
+                        # Propagate as a RuntimeError to be caught by the retry logic or caller
+                        raise RuntimeError(f"Server returned non-JSON response: {error_text[:500]}") from e
+                    except json.JSONDecodeError as e: # If content-type is JSON but body is malformed
+                        error_text = await response.text()
+                        print(f"Failed to decode JSON response (status {response.status}). Body preview: {error_text[:500]}. Error: {e}")
+                        raise RuntimeError(f"Failed to decode JSON response: {error_text[:500]}") from e
+                    except Exception as e: # Catch-all for other unexpected errors during .json() or .text()
+                        try:
+                            error_text = await response.text()
+                            print(f"Unexpected error processing server response (status {response.status}). Body preview: {error_text[:500]}. Error: {e}")
+                        except Exception as text_e:
+                            print(f"Unexpected error processing server response (status {response.status}). Additionally, failed to get response text: {text_e}. Original error: {e}")
+                        raise # Re-raise the original error
 
-                    if type(res["action"]) not in (np.ndarray, list):
+                    # Process the successfully parsed JSON response
+                    current_response_data = original_json_response
+                    if isinstance(original_json_response, list):
+                        # As per synchronous client behavior, a list response is treated as the action.
+                        current_response_data = {"action": original_json_response, "vlm_response": ""}
+
+                    if not isinstance(current_response_data, dict):
+                        # This will now be caught by the retry logic if it's a persistent server issue
                         raise RuntimeError(
-                            "Policy server returned invalid action. It must return a numpy array or a list. Received: "
-                            + str(res["action"])
+                            f"Processed server response is not a dictionary. Received: {current_response_data}"
                         )
-                    return res["action"].copy(), res["vlm_response"]
 
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                    if "action" not in current_response_data:
+                        # This will now be caught by the retry logic
+                        raise RuntimeError(
+                            f"Policy server response dictionary is missing 'action' key. Received: {current_response_data}"
+                        )
+
+                    action_data = current_response_data["action"]
+                    vlm_response_str = current_response_data.get("vlm_response", "") # Default if missing
+
+                    # Ensure action_data is either np.ndarray or list, as per original logic
+                    if not isinstance(action_data, (np.ndarray, list)):
+                        # This will now be caught by the retry logic
+                        raise RuntimeError(
+                            f"Policy server 'action' field has invalid type. Must be numpy array or list. Received type: {type(action_data)}, Value: {action_data}"
+                        )
+                    
+                    # Convert action to numpy array for consistent return type tuple[np.ndarray, str]
+                    action_np = np.array(action_data) if not isinstance(action_data, np.ndarray) else action_data.copy()
+                    
+                    return action_np, vlm_response_str
+
+            except (aiohttp.ClientError, asyncio.TimeoutError, RuntimeError) as e: # Added RuntimeError to catch our new raises
                 if attempt < max_retries - 1:
                     print(
                         f"Request failed with error: {e}; traceback: {traceback.format_exc()}. Retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})"
