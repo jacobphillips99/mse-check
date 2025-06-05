@@ -29,6 +29,7 @@ from mallet.utils import get_url
 from mallet.utils.ecot_primitives.ecot_primitive_movements import (
     classify_movement as ecot_classify_movement,
 )
+from mallet.utils.history_utils import get_history_inds
 
 json_numpy.patch()
 
@@ -62,21 +63,8 @@ def assemble_history_dict(
     if len(historical_obs) == 0 or len(historical_actions) == 0:
         return {"steps": []}
 
-    assert external_history_choice in ["all", "last", "first", "alternate", "third"]
-    if external_history_choice == "all":
-        inds = np.arange(len(historical_obs))
-    elif external_history_choice == "last":
-        inds = np.array([max(0, len(historical_obs) - 1)])  # Ensure non-negative
-    elif external_history_choice == "first":
-        inds = np.array([0])
-    elif external_history_choice == "alternate":
-        inds = np.arange(0, len(historical_obs), 2)
-    elif external_history_choice == "third":
-        inds = np.arange(0, len(historical_obs), 3)
-    elif external_history_choice.lower() == "none":
-        inds = []
-    else:
-        raise ValueError(f"Invalid external_history_choice: {external_history_choice}")
+    assert external_history_choice is not None, "external_history_choice must be provided; got None"
+    inds = get_history_inds(external_history_choice, len(historical_obs))
 
     steps = []
     for i in inds:

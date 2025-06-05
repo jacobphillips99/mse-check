@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 import draccus
 from eval import DeployConfig, deploy
+from mallet.utils.history_utils import HISTORY_CHOICES
 
 
 def run_single_experiment(params: dict[str, t.Any]) -> None:
@@ -57,7 +58,7 @@ class SweepConfig:
 @draccus.wrap()
 def main(cfg: SweepConfig) -> None:
     history_lengths = [0, 1, 2, 4, 8, 16, 32]
-    history_choices = ["all", "last", "first", "alternate", "third"]
+    history_choices = HISTORY_CHOICES
 
     # Base configuration shared across sweeps
     base_config = {
